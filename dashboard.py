@@ -60,6 +60,89 @@ if df is not None and "left" in df.columns:
     c2.metric("🎯 F1 (Klasse 1)", f"{report['1']['f1-score']:.2f}")
     c3.metric("📌 Precision (Klasse 1)", f"{report['1']['precision']:.2f}")
     c4.metric("📈 Recall (Klasse 1)", f"{report['1']['recall']:.2f}")
+    st.markdown("---")
+    st.markdown("### ✍️ Eigene Eingabe testen")
+
+    with st.form("eingabe_formular"):
+        satisfaction_level = st.slider("Zufriedenheit (0–1)", 0.0, 1.0, 0.5, 0.01)
+        last_evaluation = st.slider("Letzte Beurteilung (0–1)", 0.0, 1.0, 0.7, 0.01)
+        number_project = st.slider("Anzahl Projekte", 1, 10, 3)
+        average_montly_hours = st.slider("Monatliche Stunden", 80, 320, 160)
+        time_spend_company = st.slider("Jahre im Unternehmen", 1, 10, 3)
+        Work_accident = st.selectbox("Arbeitsunfall?", [0, 1])
+        promotion_last_5years = st.selectbox("Beförderung in letzten 5 Jahren?", [0, 1])
+        Department = st.selectbox("Abteilung", [
+            "sales", "technical", "support", "IT", "product_mng", "marketing", "RandD", "accounting", "hr", "management"
+        ])
+        salary = st.selectbox("Gehalt", ["low", "medium", "high"])
+
+        submit = st.form_submit_button("Vorhersage starten")
+
+        if submit:
+            row = pd.DataFrame([{
+                "satisfaction_level": satisfaction_level,
+                "last_evaluation": last_evaluation,
+                "number_project": number_project,
+                "average_montly_hours": average_montly_hours,
+                "time_spend_company": time_spend_company,
+                "Work_accident": Work_accident,
+                "promotion_last_5years": promotion_last_5years,
+                "Department": Department,
+                "salary": salary,
+            }])
+
+            proba = float(pipe.predict_proba(row)[0][1])
+            pred = int(proba >= threshold)
+
+            st.subheader("📤 Prognose")
+            st.write(
+                f"**Vorhersage (Modell bei Schwelle {threshold:.2f}):** {'⚠️ Kündigt' if pred == 1 else '✅ Bleibt'}")
+            st.progress(int(proba * 100))
+            st.write(f"**Wahrscheinlichkeit für Kündigung:** {proba:.2%}")
+
+            st.markdown(
+                f"🧾 Die Kündigungswahrscheinlichkeit liegt bei **{proba:.2%}**. "
+                f"Da der Schwellenwert bei **{threshold:.2f}** liegt, wird die Person als "
+                f"**{'Kündigt' if pred == 1 else 'Bleibt'}** klassifiziert."
+            )
+
+            if proba < 0.4:
+                st.success("🟢 Geringes Risiko – aktuell kein Handlungsbedarf.")
+            elif proba < 0.7:
+                st.info("🟡 Mittleres Risiko – beobachten und ggf. im Gespräch ansprechen.")
+            else:
+                st.error("🔴 Hohes Risiko – proaktiv reagieren, z. B. Feedbackgespräch prüfen.")
+
+            with st.expander("ℹ️ Wie funktioniert die Prognose?"):
+                st.markdown("""
+    - Das Modell berechnet eine **Wahrscheinlichkeit** (Risiko-Score).
+    - Die **Vorhersage** hängt vom **Schwellenwert** ab (Schieberegler links).
+    - Die Ampel hilft bei der Einordnung – unabhängig vom Schwellenwert.
+    """)
+
+            LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+            log_entry = row.copy()
+            log_entry["prediction"] = pred
+            log_entry["proba"] = proba
+            log_entry["threshold"] = threshold
+
+            if LOG_PATH.exists():
+                hist = pd.read_csv(LOG_PATH)
+                hist = pd.concat([hist, log_entry], ignore_index=True)
+            else:
+                hist = log_entry
+
+            hist.to_csv(LOG_PATH, index=False)
+            st.success(f"✅ Eingabe gespeichert: {LOG_PATH}")
+
+    st.markdown("---")
+    st.markdown("### 🗂️ Geloggte Vorhersagen")
+
+    if LOG_PATH.exists():
+        history_df = pd.read_csv(LOG_PATH)
+        st.dataframe(history_df, use_container_width=True)
+    else:
+        st.info("ℹ️ Noch keine Eingaben gespeichert.")
 
     st.markdown("---")
     st.markdown("### 📊 Visualisierungen")
@@ -96,85 +179,4 @@ if df is not None and "left" in df.columns:
         st.pyplot(fig_roc)
         st.caption("📈 ROC/AUC basieren auf Wahrscheinlichkeiten und ändern sich nicht durch den Schwellenwert.")
 
-st.markdown("---")
-st.markdown("### ✍️ Eigene Eingabe testen")
 
-with st.form("eingabe_formular"):
-    satisfaction_level = st.slider("Zufriedenheit (0–1)", 0.0, 1.0, 0.5, 0.01)
-    last_evaluation = st.slider("Letzte Beurteilung (0–1)", 0.0, 1.0, 0.7, 0.01)
-    number_project = st.slider("Anzahl Projekte", 1, 10, 3)
-    average_montly_hours = st.slider("Monatliche Stunden", 80, 320, 160)
-    time_spend_company = st.slider("Jahre im Unternehmen", 1, 10, 3)
-    Work_accident = st.selectbox("Arbeitsunfall?", [0, 1])
-    promotion_last_5years = st.selectbox("Beförderung in letzten 5 Jahren?", [0, 1])
-    Department = st.selectbox("Abteilung", [
-        "sales","technical","support","IT","product_mng","marketing","RandD","accounting","hr","management"
-    ])
-    salary = st.selectbox("Gehalt", ["low", "medium", "high"])
-
-    submit = st.form_submit_button("Vorhersage starten")
-
-    if submit:
-        row = pd.DataFrame([{
-            "satisfaction_level": satisfaction_level,
-            "last_evaluation": last_evaluation,
-            "number_project": number_project,
-            "average_montly_hours": average_montly_hours,
-            "time_spend_company": time_spend_company,
-            "Work_accident": Work_accident,
-            "promotion_last_5years": promotion_last_5years,
-            "Department": Department,
-            "salary": salary,
-        }])
-
-        proba = float(pipe.predict_proba(row)[0][1])
-        pred = int(proba >= threshold)
-
-        st.subheader("📤 Prognose")
-        st.write(f"**Vorhersage (Modell bei Schwelle {threshold:.2f}):** {'⚠️ Kündigt' if pred == 1 else '✅ Bleibt'}")
-        st.progress(int(proba * 100))
-        st.write(f"**Wahrscheinlichkeit für Kündigung:** {proba:.2%}")
-
-        st.markdown(
-            f"🧾 Die Kündigungswahrscheinlichkeit liegt bei **{proba:.2%}**. "
-            f"Da der Schwellenwert bei **{threshold:.2f}** liegt, wird die Person als "
-            f"**{'Kündigt' if pred == 1 else 'Bleibt'}** klassifiziert."
-        )
-
-        if proba < 0.4:
-            st.success("🟢 Geringes Risiko – aktuell kein Handlungsbedarf.")
-        elif proba < 0.7:
-            st.info("🟡 Mittleres Risiko – beobachten und ggf. im Gespräch ansprechen.")
-        else:
-            st.error("🔴 Hohes Risiko – proaktiv reagieren, z. B. Feedbackgespräch prüfen.")
-
-        with st.expander("ℹ️ Wie funktioniert die Prognose?"):
-            st.markdown("""
-- Das Modell berechnet eine **Wahrscheinlichkeit** (Risiko-Score).
-- Die **Vorhersage** hängt vom **Schwellenwert** ab (Schieberegler links).
-- Die Ampel hilft bei der Einordnung – unabhängig vom Schwellenwert.
-""")
-
-        LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        log_entry = row.copy()
-        log_entry["prediction"] = pred
-        log_entry["proba"] = proba
-        log_entry["threshold"] = threshold
-
-        if LOG_PATH.exists():
-            hist = pd.read_csv(LOG_PATH)
-            hist = pd.concat([hist, log_entry], ignore_index=True)
-        else:
-            hist = log_entry
-
-        hist.to_csv(LOG_PATH, index=False)
-        st.success(f"✅ Eingabe gespeichert: {LOG_PATH}")
-
-st.markdown("---")
-st.markdown("### 🗂️ Geloggte Vorhersagen")
-
-if LOG_PATH.exists():
-    history_df = pd.read_csv(LOG_PATH)
-    st.dataframe(history_df, use_container_width=True)
-else:
-    st.info("ℹ️ Noch keine Eingaben gespeichert.")
